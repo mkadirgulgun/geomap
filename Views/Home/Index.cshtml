@@ -1,0 +1,615 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>GeoMap</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+    <div id="app-container">
+        <div id="header">
+            <h1>GeoMap</h1>
+        </div>
+        <div id="content">
+            <div id="sidebar">
+                <h2 class="section-title">Katmanlar</h2>
+                <div id="layers" class="layer-list">
+                </div>
+            </div>
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="addGeometryModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">Geometri Ekle</h3>
+            <div class="form-group">
+                <label for="geometryName">Ad:</label>
+                <input type="text" id="geometryName" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="geometryDescription">Açıklama:</label>
+                <textarea id="geometryDescription" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="layerSelect">Katman:</label>
+                <select id="layerSelect" class="form-control">
+                    <option value="new">Yeni Katman Oluştur</option>
+                </select>
+            </div>
+            <div id="newLayerGroup" class="form-group">
+                <label for="newLayerName">Yeni Katman Adı:</label>
+                <input type="text" id="newLayerName" class="form-control">
+            </div>
+            <div class="form-actions">
+                <button id="cancelAddGeometry" class="btn btn-secondary">İptal</button>
+                <button id="saveGeometry" class="btn btn-primary">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editGeometryModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">Geometri Düzenle</h3>
+            <div class="form-group">
+                <label for="editGeometryName">Ad:</label>
+                <input type="text" id="editGeometryName" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="editGeometryDescription">Açıklama:</label>
+                <textarea id="editGeometryDescription" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editLayerSelect">Katman:</label>
+                <select id="editLayerSelect" class="form-control">
+                </select>
+            </div>
+            <div id="editNewLayerGroup" class="form-group">
+                <label for="editNewLayerName">Yeni Katman Adı:</label>
+                <input type="text" id="editNewLayerName" class="form-control">
+            </div>
+            <input type="hidden" id="editGeometryId">
+            <div class="form-actions">
+                <button id="cancelEditGeometry" class="btn btn-secondary">İptal</button>
+                <button id="updateGeometry" class="btn btn-primary">Güncelle</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/wellknown@0.5.0/wellknown.js"></script>
+
+    <script>
+        const map = L.map('map').setView([39.92, 32.85], 6);
+        let drawnItems = new L.FeatureGroup().addTo(map);
+
+        const activeLayers = {};
+        let availableLayers = [];
+        const geometriesByLayer = {};
+        const expandedLayers = {};
+        let currentDrawing = null;
+
+        const wmsLayer = L.tileLayer.wms("https://cbsservis.tkgm.gov.tr/arcgis/services/TUCBS/TUCBS_Kadastro/MapServer/WMSServer", {
+            layers: '0',
+            format: 'image/png',
+            transparent: true,
+            attribution: "TUCBS"
+        }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        const drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: {
+                polygon: true,
+                polyline: true,
+                rectangle: false,
+                circle: false,
+                marker: true
+            }
+        });
+        map.addControl(drawControl);
+
+        const modal = document.getElementById("addGeometryModal");
+        const nameInput = document.getElementById("geometryName");
+        const descriptionInput = document.getElementById("geometryDescription");
+        const layerSelect = document.getElementById("layerSelect");
+        const newLayerGroup = document.getElementById("newLayerGroup");
+        const newLayerInput = document.getElementById("newLayerName");
+        const saveBtn = document.getElementById("saveGeometry");
+        const cancelBtn = document.getElementById("cancelAddGeometry");
+
+        const editModal = document.getElementById("editGeometryModal");
+        const editNameInput = document.getElementById("editGeometryName");
+        const editDescriptionInput = document.getElementById("editGeometryDescription");
+        const editLayerSelect = document.getElementById("editLayerSelect");
+        const editNewLayerGroup = document.getElementById("editNewLayerGroup");
+        const editNewLayerInput = document.getElementById("editNewLayerName");
+        const editGeometryIdInput = document.getElementById("editGeometryId");
+        const updateBtn = document.getElementById("updateGeometry");
+        const cancelEditBtn = document.getElementById("cancelEditGeometry");
+
+        editLayerSelect.addEventListener("change", function () {
+            if (this.value === "new") {
+                editNewLayerGroup.style.display = "block";
+            } else {
+                editNewLayerGroup.style.display = "none";
+            }
+        });
+
+        cancelEditBtn.addEventListener("click", function () {
+            editModal.style.display = "none";
+        });
+
+        updateBtn.addEventListener("click", function () {
+            const id = editGeometryIdInput.value;
+            const name = editNameInput.value.trim();
+            const description = editDescriptionInput.value.trim();
+            let layerName;
+
+            if (editLayerSelect.value === "new") {
+                layerName = editNewLayerInput.value.trim();
+                if (!layerName) {
+                    alert("Lütfen bir katman adı girin.");
+                    return;
+                }
+            } else {
+                layerName = editLayerSelect.value;
+
+            }
+
+            if (!name) {
+                alert("Lütfen bir ad girin.");
+                return;
+            }
+
+            const geometry = findGeometryById(id);
+            const originalLayerName = geometry ? geometry.layerName : null;
+
+            axios.put(`/api/geometry/${id}`, {
+                name,
+                description,
+                layerName
+            }).then(() => {
+                editModal.style.display = "none";
+
+                fetchAllGeometries();
+
+                alert("Geometri başarıyla güncellendi");
+            }).catch(err => {
+                alert("Hata: " + err.message);
+            });
+        });
+
+        layerSelect.addEventListener("change", function () {
+            if (this.value === "new") {
+                newLayerGroup.style.display = "block";
+            } else {
+                newLayerGroup.style.display = "none";
+            }
+        });
+
+        cancelBtn.addEventListener("click", function () {
+            modal.style.display = "none";
+            if (currentDrawing) {
+                drawnItems.removeLayer(currentDrawing);
+                currentDrawing = null;
+            }
+        });
+
+        saveBtn.addEventListener("click", function () {
+            const name = nameInput.value.trim();
+            const description = descriptionInput.value.trim();
+            let layerName;
+
+            if (!currentDrawing) {
+                alert("Çizim bulunamadı.");
+                return;
+            }
+
+            const geojson = currentDrawing.toGeoJSON();
+            const geojsonStr = JSON.stringify(geojson.geometry);
+
+            axios.post('/api/geometry', {
+                name,
+                description,
+                geoJson: geojsonStr,
+                layerName
+            }).then(() => {
+                alert("Kaydedildi.");
+                modal.style.display = "none";
+                currentDrawing = null;
+                fetchAllGeometries();
+            }).catch(err => {
+                alert("Hata: " + err.message);
+            });
+        });
+
+        map.on(L.Draw.Event.CREATED, function (e) {
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            currentDrawing = layer;
+
+            nameInput.value = "";
+            descriptionInput.value = "";
+            newLayerInput.value = "";
+
+            populateLayerSelect();
+
+            modal.style.display = "block";
+        });
+
+        function populateLayerSelect() {
+            while (layerSelect.options.length > 1) {
+                layerSelect.remove(1);
+            }
+
+            availableLayers.forEach(layer => {
+                const option = document.createElement("option");
+                option.value = layer;
+                option.text = layer;
+                layerSelect.add(option);
+            });
+
+            layerSelect.value = "new";
+            newLayerGroup.style.display = "block";
+        }
+
+        function populateEditLayerSelect(currentLayer) {
+            while (editLayerSelect.options.length > 0) {
+                editLayerSelect.remove(0);
+            }
+
+            const newOption = document.createElement("option");
+            newOption.value = "new";
+            newOption.text = "Yeni Katman Oluştur";
+            editLayerSelect.add(newOption);
+
+            availableLayers.forEach(layer => {
+                const option = document.createElement("option");
+                option.value = layer;
+                option.text = layer;
+                editLayerSelect.add(option);
+            });
+
+            if (currentLayer && availableLayers.includes(currentLayer)) {
+                editLayerSelect.value = currentLayer;
+                editNewLayerGroup.style.display = "none";
+            } else {
+                editLayerSelect.value = "new";
+                editNewLayerGroup.style.display = "block";
+                editNewLayerInput.value = currentLayer || "";
+            }
+        }
+
+        function toggleLayer(layerName, isChecked) {
+            if (isChecked) {
+                if (!activeLayers[layerName]) {
+                    loadLayer(layerName);
+                }
+            } else {
+                if (activeLayers[layerName]) {
+                    map.removeLayer(activeLayers[layerName]);
+                    delete activeLayers[layerName];
+                }
+            }
+        }
+
+        map.on(L.Draw.Event.EDITED, function (e) {
+            const layers = e.layers;
+            const updatedGeometries = [];
+
+            layers.eachLayer(function (layer) {
+                if (layer.geometryId) {
+                    const geojson = layer.toGeoJSON();
+                    const geojsonStr = JSON.stringify(geojson.geometry);
+
+                    updatedGeometries.push({
+                        id: layer.geometryId,
+                        geoJson: geojsonStr
+                    });
+                }
+            });
+
+            Promise.all(updatedGeometries.map(geo =>
+                axios.put(`/api/geometry/${geo.id}`, { geoJson: geo.geoJson })
+            )).then(() => {
+                fetchAllGeometries();
+                alert("Geometriler başarıyla güncellendi");
+            }).catch(err => {
+                alert("Hata: " + err.message);
+            });
+        });
+
+        map.on(L.Draw.Event.DELETED, function (e) {
+            const layers = e.layers;
+
+            layers.eachLayer(function (layer) {
+                if (layer.geometryId) {
+                    deleteGeometry(layer.geometryId);
+                }
+            });
+        });
+
+        function loadLayer(layerName) {
+            if (!geometriesByLayer[layerName]) return;
+
+            const features = geometriesByLayer[layerName].map(g => ({
+                type: "Feature",
+                geometry: JSON.parse(g.geometry),
+                properties: {
+                    id: g.id,
+                    name: g.name,
+                    description: g.description,
+                    layerName: g.layerName
+                }
+            }));
+
+            const layerGroup = L.geoJSON(features, {
+                onEachFeature: function (feature, layer) {
+                    const props = feature.properties;
+
+                    const popupContent = createPopupContent(props);
+                    layer.bindPopup(popupContent, { maxWidth: 300 });
+
+                    layer.geometryId = props.id;
+
+                    drawnItems.addLayer(layer);
+
+                    layer.on('click', function () {
+                        const geometryItem = document.getElementById(`geometry-${props.id}`);
+                        if (geometryItem) {
+                            if (!expandedLayers[props.layerName]) {
+                                expandedLayers[props.layerName] = true;
+                                renderLayers();
+                            }
+
+                            geometryItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            geometryItem.classList.add('highlight');
+                            setTimeout(() => {
+                                geometryItem.classList.remove('highlight');
+                            }, 2000);
+                        }
+                    });
+                }
+            });
+
+            layerGroup.addTo(map);
+            activeLayers[layerName] = layerGroup;
+        }
+
+        function createPopupContent(props) {
+            const div = document.createElement('div');
+            div.className = 'popup-content';
+            div.innerHTML = `
+                                <h3 class="popup-title">${props.name}</h3>
+                                <p class="popup-description">${props.description || 'No description'}</p>
+                                <p class="popup-layer"><strong>Layer:</strong> ${props.layerName}</p>
+                            `;
+            return div;
+        }
+
+        function deleteGeometry(id) {
+            const geometry = findGeometryById(id);
+            if (!geometry) return;
+
+            if (confirm(`"${geometry.name}" öğesini silmek istediğinizden emin misiniz?`)) {
+                axios.delete(`/api/geometry/${id}`).then(() => {
+                    fetchAllGeometries();
+                    alert("Geometri başarıyla silindi");
+                }).catch(err => {
+                    alert("Hata: " + err.message);
+                });
+            }
+        }
+
+        function editGeometry(id) {
+            const geometry = findGeometryById(id);
+            if (!geometry) return;
+
+            editNameInput.value = geometry.name || "";
+            editDescriptionInput.value = geometry.description || "";
+            editGeometryIdInput.value = id;
+
+            populateEditLayerSelect(geometry.layerName);
+
+            editModal.style.display = "block";
+        }
+
+        function findGeometryById(id) {
+            for (const layerName in geometriesByLayer) {
+                const geometry = geometriesByLayer[layerName].find(g => g.id === id);
+                if (geometry) return geometry;
+            }
+            return null;
+        }
+
+        function toggleGeometryList(layerName) {
+            expandedLayers[layerName] = !expandedLayers[layerName];
+            renderLayers();
+        }
+
+        function fetchAllGeometries() {
+            axios.get("/api/geometry/layers").then(res => {
+                availableLayers = res.data;
+
+                const promises = availableLayers.map(layerName =>
+                    axios.get(`/api/geometry/layer/${layerName}`)
+                        .then(res => {
+                            geometriesByLayer[layerName] = res.data;
+                        })
+                );
+
+                Promise.all(promises).then(() => {
+                    renderLayers();
+                    refreshActiveLayers();
+                });
+            });
+        }
+
+        function refreshActiveLayers() {
+            const activeLayerNames = Object.keys(activeLayers);
+
+            drawnItems.clearLayers();
+
+            activeLayerNames.forEach(layerName => {
+                if (activeLayers[layerName]) {
+                    map.removeLayer(activeLayers[layerName]);
+                    delete activeLayers[layerName];
+                }
+            });
+
+            activeLayerNames.forEach(layerName => {
+                loadLayer(layerName);
+            });
+        }
+
+        function renderLayers() {
+            const container = document.getElementById("layers");
+            container.innerHTML = "";
+
+            availableLayers.forEach(layerName => {
+                const checkboxId = `layer-${layerName.replace(/\s+/g, '-')}`;
+                const isActive = !!activeLayers[layerName];
+                const isExpanded = expandedLayers[layerName] === true;
+
+                const layerItem = document.createElement("div");
+                layerItem.className = "layer-item";
+
+                const layerHeader = document.createElement("div");
+                layerHeader.className = "layer-header";
+
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.id = checkboxId;
+                checkbox.className = "layer-checkbox";
+                checkbox.checked = isActive;
+                checkbox.onchange = (e) => toggleLayer(layerName, e.target.checked);
+
+                const label = document.createElement("label");
+                label.htmlFor = checkboxId;
+                label.innerText = layerName;
+                label.className = "layer-label";
+
+                const toggle = document.createElement("span");
+                toggle.className = `layer-toggle ${isExpanded ? 'open' : ''}`;
+                toggle.innerHTML = `<i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i>`;
+                toggle.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleGeometryList(layerName);
+                };
+
+                layerHeader.appendChild(checkbox);
+                layerHeader.appendChild(label);
+                layerHeader.appendChild(toggle);
+
+                layerHeader.onclick = (e) => {
+                    if (e.target !== checkbox) {
+                        toggleGeometryList(layerName);
+                    }
+                };
+
+                layerItem.appendChild(layerHeader);
+
+                if (isExpanded && geometriesByLayer[layerName] && geometriesByLayer[layerName].length > 0) {
+                    const geometryList = document.createElement("div");
+                    geometryList.className = "geometry-list";
+
+                    geometriesByLayer[layerName].forEach(geometry => {
+                        const geometryItem = document.createElement("div");
+                        geometryItem.className = "geometry-item";
+                        geometryItem.id = `geometry-${geometry.id}`;
+
+                        const geometryIcon = document.createElement("i");
+
+                        let iconClass = "fa-map-marker-alt";
+                        if (geometry.geometry.includes('"type":"Polygon"')) {
+                            iconClass = "fa-draw-polygon";
+                        } else if (geometry.geometry.includes('"type":"LineString"')) {
+                            iconClass = "fa-route";
+                        }
+
+                        geometryIcon.className = `fas ${iconClass} geometry-icon`;
+
+                        const geometryName = document.createElement("span");
+                        geometryName.className = "geometry-name";
+                        geometryName.innerText = geometry.name;
+                        geometryName.title = geometry.description || geometry.name;
+
+                        const geometryActions = document.createElement("div");
+                        geometryActions.className = "geometry-actions";
+
+                        const editBtn = document.createElement("button");
+                        editBtn.className = "edit-btn";
+                        editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                        editBtn.title = "Edit";
+                        editBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            editGeometry(geometry.id);
+                        };
+
+                        const deleteBtn = document.createElement("button");
+                        deleteBtn.className = "delete-btn";
+                        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                        deleteBtn.title = "Delete";
+                        deleteBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            deleteGeometry(geometry.id);
+                        };
+
+                        geometryActions.appendChild(editBtn);
+                        geometryActions.appendChild(deleteBtn);
+
+                        geometryItem.appendChild(geometryIcon);
+                        geometryItem.appendChild(geometryName);
+                        geometryItem.appendChild(geometryActions);
+
+                        geometryItem.onclick = () => {
+                            if (isActive && activeLayers[layerName]) {
+                                activeLayers[layerName].eachLayer(layer => {
+                                    if (layer.feature && layer.feature.properties && layer.feature.properties.id === geometry.id) {
+                                        map.fitBounds(layer.getBounds());
+                                        layer.openPopup();
+                                    }
+                                });
+                            } else {
+                                toggleLayer(layerName, true);
+                                checkbox.checked = true;
+                                setTimeout(() => {
+                                    activeLayers[layerName].eachLayer(layer => {
+                                        if (layer.feature && layer.feature.properties && layer.feature.properties.id === geometry.id) {
+                                            map.fitBounds(layer.getBounds());
+                                            layer.openPopup();
+                                        }
+                                    });
+                                }, 300);
+                            }
+                        };
+
+                        geometryList.appendChild(geometryItem);
+                    });
+
+                    layerItem.appendChild(geometryList);
+                }
+
+                container.appendChild(layerItem);
+            });
+        }
+
+        fetchAllGeometries();
+    </script>
+</body>
+</html>
+

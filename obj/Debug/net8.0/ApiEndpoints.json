@@ -1,0 +1,113 @@
+[
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "AddGeometry",
+    "RelativePath": "api/Geometry",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "GeoMap.Controllers.GeometryDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "GetById",
+    "RelativePath": "api/Geometry/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "UpdateGeometry",
+    "RelativePath": "api/Geometry/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "dto",
+        "Type": "GeoMap.Controllers.UpdateGeometryDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "DeleteGeometry",
+    "RelativePath": "api/Geometry/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "GetIntersectingGeometries",
+    "RelativePath": "api/Geometry/intersect",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "geoJson",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "GetByLayer",
+    "RelativePath": "api/Geometry/layer/{layerName}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "layerName",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GeoMap.Controllers.GeometryController",
+    "Method": "GetDistinctLayers",
+    "RelativePath": "api/Geometry/layers",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  }
+]
